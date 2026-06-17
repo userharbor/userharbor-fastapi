@@ -1,0 +1,18 @@
+[project]
+name = "userharbor-fastapi"
+version = "0.0.0"
+description = "FastAPI integration for UserHarbor, a framework agnostic user management system for Python applications."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "SpaceShaman", email = "spaceshaman@tuta.io" }]
+dependencies = []
+
+[project.urls]
+Documentation = "https://github.com/userharbor/userharbor-fastapi"
+Homepage = "https://github.com/userharbor/userharbor-fastapi"
+Repository = "https://github.com/userharbor/userharbor-fastapi"
+
+[build-system]
+requires = ["uv_build>=0.11.14,<0.12.0"]
+build-backend = "uv_build"
