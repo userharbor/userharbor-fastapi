@@ -1,17 +1,48 @@
 [project]
 name = "userharbor-fastapi"
-version = "0.0.0"
+version = "0.1.0"
 description = "FastAPI integration for UserHarbor, a framework agnostic user management system for Python applications."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "SpaceShaman", email = "spaceshaman@tuta.io" }]
-dependencies = []
+keywords = [
+  "auth",
+  "authentication",
+  "authorization",
+  "login",
+  "registration",
+  "security",
+  "sessions",
+  "signup",
+  "user-management",
+  "users"
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
+]
+dependencies = [
+  "fastapi>=0.138.2",
+  "userharbor>=0.6.0",
+]
 
 [project.urls]
-Documentation = "https://github.com/userharbor/userharbor-fastapi"
+Documentation = "https://userharbor.github.io/userharbor"
 Homepage = "https://github.com/userharbor/userharbor-fastapi"
 Repository = "https://github.com/userharbor/userharbor-fastapi"
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.1",
+  "pytest>=9.1.1",
+  "pytest-cov>=7.1.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.14,<0.12.0"]

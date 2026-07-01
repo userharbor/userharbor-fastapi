@@ -1,0 +1,252 @@
+from contextlib import nullcontext
+from dataclasses import dataclass
+from datetime import datetime
+
+from userharbor.interfaces import CreateUserRequest, EmailSender, UserStore, UserToken
+
+
+@dataclass
+class TestUser:
+    username: str
+    email: str
+    verified: bool
+    display_name: str = "Test User"
+
+
+@dataclass
+class StoredUser:
+    username: str
+    email: str
+    password_hash: str
+    email_verification_token_hash: str
+    verified: bool = False
+    password_reset_token_hash: str | None = None
+    session_token_hashes: list[str] | None = None
+    roles: set[str] | None = None
+
+    def __post_init__(self) -> None:
+        if self.session_token_hashes is None:
+            self.session_token_hashes = []
+        if self.roles is None:
+            self.roles = set()
+
+
+@dataclass
+class SentVerification:
+    username: str
+    email: str
+    verification_token: str
+
+
+@dataclass
+class SentPasswordReset:
+    username: str
+    email: str
+    reset_token: str
+
+
+@dataclass
+class SentAccountNotification:
+    username: str
+    email: str
+
+
+class InMemoryUserStore(UserStore[TestUser]):
+    def __init__(self) -> None:
+        self.users: dict[str, StoredUser] = {}
+        self.email_verifications: dict[str, UserToken] = {}
+        self.sessions: dict[str, UserToken] = {}
+        self.password_resets: dict[str, UserToken] = {}
+        self.roles: set[str] = set()
+        self.permissions: set[str] = set()
+        self.role_permissions: dict[str, set[str]] = {}
+
+    def transaction(self):
+        return nullcontext()
+
+    def create_user(self, user: CreateUserRequest) -> None:
+        self.users[user.username] = StoredUser(
+            username=user.username,
+            email=user.email,
+            password_hash=user.password_hash,
+            email_verification_token_hash=user.verification_token_hash,
+        )
+        self.email_verifications[user.verification_token_hash] = UserToken(
+            username=user.username,
+            token_hash=user.verification_token_hash,
+            expires_at=user.expires_at,
+        )
+
+    def set_user_verified(self, username: str) -> None:
+        self.users[username].verified = True
+
+    def delete_user(self, username: str) -> None:
+        del self.users[username]
+
+    def get_user_by_username(self, username: str) -> TestUser | None:
+        stored_user = self.users.get(username)
+        if stored_user is None:
+            return None
+        return TestUser(stored_user.username, stored_user.email, stored_user.verified)
+
+    def get_user_by_email(self, email: str) -> TestUser | None:
+        for stored_user in self.users.values():
+            if stored_user.email == email:
+                return TestUser(
+                    stored_user.username,
+                    stored_user.email,
+                    stored_user.verified,
+                )
+        return None
+
+    def get_password_hash(self, username: str) -> str:
+        return self.users[username].password_hash
+
+    def set_password_hash(self, username: str, password_hash: str) -> None:
+        self.users[username].password_hash = password_hash
+
+    def get_email_verification(self, token_hash: str) -> UserToken | None:
+        return self.email_verifications.get(token_hash)
+
+    def set_email_verification(self, verification: UserToken) -> None:
+        old_token_hash = self.users[verification.username].email_verification_token_hash
+        self.email_verifications.pop(old_token_hash, None)
+        self.users[
+            verification.username
+        ].email_verification_token_hash = verification.token_hash
+        self.email_verifications[verification.token_hash] = verification
+
+    def remove_email_verification(self, token_hash: str) -> None:
+        del self.email_verifications[token_hash]
+
+    def get_session(self, token_hash: str) -> UserToken | None:
+        return self.sessions.get(token_hash)
+
+    def add_session(self, session: UserToken) -> None:
+        session_token_hashes = self.users[session.username].session_token_hashes
+        assert session_token_hashes is not None
+        session_token_hashes.append(session.token_hash)
+        self.sessions[session.token_hash] = session
+
+    def remove_session(self, token_hash: str) -> None:
+        session = self.sessions.pop(token_hash)
+        session_token_hashes = self.users[session.username].session_token_hashes
+        assert session_token_hashes is not None
+        session_token_hashes.remove(token_hash)
+
+    def remove_all_sessions(self, username: str) -> None:
+        session_token_hashes = self.users[username].session_token_hashes
+        assert session_token_hashes is not None
+        for token_hash in list(session_token_hashes):
+            del self.sessions[token_hash]
+        session_token_hashes.clear()
+
+    def refresh_session(self, token_hash: str, new_expires_at: datetime) -> None:
+        self.sessions[token_hash].expires_at = new_expires_at
+
+    def get_password_reset(self, token_hash: str) -> UserToken | None:
+        return self.password_resets.get(token_hash)
+
+    def set_password_reset(self, reset: UserToken) -> None:
+        old_token_hash = self.users[reset.username].password_reset_token_hash
+        if old_token_hash is not None:
+            self.password_resets.pop(old_token_hash, None)
+        self.users[reset.username].password_reset_token_hash = reset.token_hash
+        self.password_resets[reset.token_hash] = reset
+
+    def remove_password_reset(self, token_hash: str) -> None:
+        reset = self.password_resets.pop(token_hash)
+        self.users[reset.username].password_reset_token_hash = None
+
+    def create_role(self, role: str) -> None:
+        self.roles.add(role)
+        self.role_permissions[role] = set()
+
+    def delete_role(self, role: str) -> None:
+        self.roles.remove(role)
+        self.role_permissions.pop(role, None)
+        for user in self.users.values():
+            assert user.roles is not None
+            user.roles.discard(role)
+
+    def list_roles(self) -> set[str]:
+        return self.roles.copy()
+
+    def role_exists(self, role: str) -> bool:
+        return role in self.roles
+
+    def grant_role_to_user(self, username: str, role: str) -> None:
+        roles = self.users[username].roles
+        assert roles is not None
+        roles.add(role)
+
+    def revoke_role_from_user(self, username: str, role: str) -> None:
+        roles = self.users[username].roles
+        assert roles is not None
+        roles.discard(role)
+
+    def get_user_roles(self, username: str) -> set[str]:
+        roles = self.users[username].roles
+        assert roles is not None
+        return roles.copy()
+
+    def create_permission(self, permission: str) -> None:
+        self.permissions.add(permission)
+
+    def delete_permission(self, permission: str) -> None:
+        self.permissions.remove(permission)
+        for permissions in self.role_permissions.values():
+            permissions.discard(permission)
+
+    def list_permissions(self) -> set[str]:
+        return self.permissions.copy()
+
+    def permission_exists(self, permission: str) -> bool:
+        return permission in self.permissions
+
+    def grant_permission_to_role(self, role: str, permission: str) -> None:
+        self.role_permissions[role].add(permission)
+
+    def revoke_permission_from_role(self, role: str, permission: str) -> None:
+        self.role_permissions[role].discard(permission)
+
+    def get_role_permissions(self, role: str) -> set[str]:
+        return self.role_permissions[role].copy()
+
+    def get_user_permissions(self, username: str) -> set[str]:
+        permissions = set()
+        roles = self.users[username].roles
+        assert roles is not None
+        for role in roles:
+            permissions.update(self.role_permissions[role])
+        return permissions
+
+
+class SpyEmailSender(EmailSender):
+    def __init__(self) -> None:
+        self.sent_verifications: list[SentVerification] = []
+        self.sent_password_resets: list[SentPasswordReset] = []
+        self.sent_email_verified: list[SentAccountNotification] = []
+        self.sent_password_changed: list[SentAccountNotification] = []
+        self.sent_account_deleted: list[SentAccountNotification] = []
+
+    def send_verification(
+        self, username: str, email: str, verification_token: str
+    ) -> None:
+        self.sent_verifications.append(
+            SentVerification(username, email, verification_token)
+        )
+
+    def send_password_reset(
+        self, username: str, email: str, reset_token: str
+    ) -> None:
+        self.sent_password_resets.append(SentPasswordReset(username, email, reset_token))
+
+    def send_email_verified(self, username: str, email: str) -> None:
+        self.sent_email_verified.append(SentAccountNotification(username, email))
+
+    def send_password_changed(self, username: str, email: str) -> None:
+        self.sent_password_changed.append(SentAccountNotification(username, email))
+
+    def send_account_deleted(self, username: str, email: str) -> None:
+        self.sent_account_deleted.append(SentAccountNotification(username, email))
