@@ -13,9 +13,6 @@
 [![Pytest](https://img.shields.io/badge/testing-Pytest-red?logo=pytest&logoColor=red)](https://docs.pytest.org/)
 [![Zensical](https://img.shields.io/badge/docs-Zensical-yellow?logo=MaterialForMkDocs&logoColor=yellow)](https://userharbor.github.io/userharbor/)
 
-> **Project status:** UserHarbor FastAPI is currently in an early stage of development.
-> The API may change frequently. The library is not ready for production use yet.
-
 `userharbor-fastapi` provides a FastAPI integration for
 [`userharbor`](https://github.com/userharbor/userharbor).
 
