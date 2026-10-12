@@ -33,7 +33,7 @@ dependencies = [
 ]
 
 [project.urls]
-Documentation = "https://userharbor.github.io/userharbor"
+Documentation = "https://userharbor.github.io"
 Homepage = "https://github.com/userharbor/userharbor-fastapi"
 Repository = "https://github.com/userharbor/userharbor-fastapi"
 
